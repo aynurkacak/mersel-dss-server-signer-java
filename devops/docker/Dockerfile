@@ -1,6 +1,7 @@
 # Multi-stage Dockerfile for Sign API
 # Stage 1: Build
-FROM maven:3.8-openjdk-8 AS builder
+# FROM maven:3.8-openjdk-8 AS builder
+FROM maven:3.8.6-eclipse-temurin-11 AS builder
 
 WORKDIR /build
 
@@ -21,7 +22,8 @@ COPY src ./src
 RUN mvn clean package -DskipTests -B
 
 # Stage 2: Runtime
-FROM eclipse-temurin:8-jre
+# FROM eclipse-temurin:8-jre
+FROM eclipse-temurin:11-jre-focal
 
 LABEL maintainer="Mersel <info@mersel.io>"
 LABEL description="Mersel DSS Signer API - Dijital İmza Servisi"

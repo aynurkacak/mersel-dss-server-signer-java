@@ -201,9 +201,9 @@ public class WsSecuritySignatureService {
         createdElement.setTextContent(now.toString());
         timestampElement.appendChild(createdElement);
         
-        // Expires zamanı (30 saniye sonra)
+        // Expires zamanı (3600 saniye sonra)
         Element expiresElement = document.createElementNS(XmlConstants.NS_WSU, "wsu:Expires");
-        java.time.Instant expires = now.plusSeconds(30);
+        java.time.Instant expires = now.plusSeconds(3600);
         expiresElement.setTextContent(expires.toString());
         timestampElement.appendChild(expiresElement);
         

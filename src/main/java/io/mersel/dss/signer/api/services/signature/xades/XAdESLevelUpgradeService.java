@@ -54,12 +54,17 @@ public class XAdESLevelUpgradeService {
         }
 
         try {
-            LOGGER.info("{} için XAdES-A seviyesine yükseltiliyor...", documentType);
+            LOGGER.info("{} için XAdES-A seviyesine yükseltiliyor - 070426...", documentType);
+            DigestAlgorithm usedDigestAlgorithm = baseParameters.getDigestAlgorithm() != null 
+                    ? baseParameters.getDigestAlgorithm() 
+                    : DigestAlgorithm.SHA256;
 
             // Timestamp parametrelerini yapılandır
             XAdESTimestampParameters tsParams = new XAdESTimestampParameters();
-            tsParams.setCanonicalizationMethod(CanonicalizationMethod.INCLUSIVE_WITH_COMMENTS);
-            tsParams.setDigestAlgorithm(DigestAlgorithm.SHA256);
+            //tsParams.setCanonicalizationMethod(CanonicalizationMethod.EXCLUSIVE);
+            //tsParams.setCanonicalizationMethod("http://www.w3.org/TR/2001/REC-xml-c14n-20010315");
+            tsParams.setCanonicalizationMethod("http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments");
+            tsParams.setDigestAlgorithm(usedDigestAlgorithm);
 
             baseParameters.setArchiveTimestampParameters(tsParams);
             baseParameters.setSignatureTimestampParameters(tsParams);

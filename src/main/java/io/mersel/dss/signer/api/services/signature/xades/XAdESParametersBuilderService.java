@@ -73,7 +73,7 @@ public class XAdESParametersBuilderService {
         // İmzalama sertifikası ve zincir
         params.setSigningCertificate(material.getPrimaryCertificateToken());
         params.setCertificateChain(material.getCertificateTokens());
-        params.setCheckCertificateRevocation(true);
+        params.setCheckCertificateRevocation(false);
 
         // KeyInfo yapılandırması
         params.setSignKeyInfo(false);
@@ -95,7 +95,7 @@ public class XAdESParametersBuilderService {
         }
 
         // Referanslar
-        List<DSSReference> references = buildReferences(digestAlgorithm);
+        List<DSSReference> references = buildReferences(digestAlgorithm, document);
         params.setReferences(references);
 
         // Veri nesnesi formatı
@@ -107,7 +107,7 @@ public class XAdESParametersBuilderService {
     /**
      * İmza için referansları oluşturur.
      */
-    private List<DSSReference> buildReferences(DigestAlgorithm digestAlgorithm) {
+    private List<DSSReference> buildReferences(DigestAlgorithm digestAlgorithm, Document document) {
         List<DSSReference> references = new ArrayList<>();
 
         DSSReference docRef = new DSSReference();

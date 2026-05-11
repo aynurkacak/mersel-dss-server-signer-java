@@ -1744,11 +1744,7 @@ public abstract class XAdESSignatureBuilder extends XAdESBuilder implements Sign
         // ##### DER dışı formatı korumak için ASN.1 dönüştürmesi      #
         // ##### atlanır. DSS varsayılanı bu imzalarda hata yaratır.   #
         // #############################################################
-        if (EncryptionAlgorithm.ECDSA.isEquivalent(encryptionAlgorithm)) {
-            signatureValueBytes = signatureValue;
-        } else {
-            signatureValueBytes = DSSASN1Utils.ensurePlainSignatureValue(encryptionAlgorithm, signatureValue);
-        }
+        signatureValueBytes = DSSASN1Utils.ensurePlainSignatureValue(encryptionAlgorithm, signatureValue);
         final String signatureValueBase64Encoded = Utils.toBase64(signatureValueBytes);
         final Text signatureValueNode = documentDom.createTextNode(signatureValueBase64Encoded);
         signatureValueDom.appendChild(signatureValueNode);

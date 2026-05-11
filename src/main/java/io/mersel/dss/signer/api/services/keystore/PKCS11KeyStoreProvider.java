@@ -4,10 +4,8 @@ import io.mersel.dss.signer.api.exceptions.KeyStoreException;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sun.security.pkcs11.SunPKCS11;
 
-import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
+import java.security.AuthProvider;
 import java.security.KeyStore;
 import java.security.Provider;
 import java.security.Security;
@@ -15,7 +13,7 @@ import java.util.StringJoiner;
 
 /**
  * PKCS#11 donanım güvenlik modülleri (HSM) için KeyStore sağlayıcısı.
- * Hem slot tabanlı hem de kütüphane tabanlı yapılandırmayı destekler.
+ * Java 11+ uyumlu hale getirilmiştir.
  */
 public class PKCS11KeyStoreProvider implements KeyStoreProvider {
 
@@ -56,40 +54,26 @@ public class PKCS11KeyStoreProvider implements KeyStoreProvider {
     private Provider buildPKCS11Provider() {
         ensureBouncyCastleRegistered();
 
+        // Java 11+ için konfigürasyon string formatında hazırlanır
         StringJoiner configJoiner = new StringJoiner(System.lineSeparator());
-        configJoiner.add("name = "+providerName);
-        configJoiner.add("library = "+"\""+libraryPath+"\"");
+        configJoiner.add("name = " + providerName);
+        configJoiner.add("library = " + "\"" + libraryPath.replace("\\", "\\\\") + "\"");
 
         if (slotIndex != null && slotIndex >= 0) {
-            configJoiner.add("slotListIndex = "+ slotIndex);
-        }else if(slot != null && slot>= 0){
-            configJoiner.add("slot = "+slot);
+            configJoiner.add("slotListIndex = " + slotIndex);
+        } else if (slot != null && slot >= 0) {
+            configJoiner.add("slot = " + slot);
         }
-        
-        byte[] configBytes = configJoiner.toString().getBytes(StandardCharsets.UTF_8);
-        SunPKCS11 provider = new SunPKCS11(new ByteArrayInputStream(configBytes));
-        Security.addProvider(provider);
+
+        // Java 9+ için SunPKCS11 yükleme yöntemi
+        Provider p = Security.getProvider("SunPKCS11");
+        p = ((AuthProvider) p).configure("--" + configJoiner.toString());
+        Security.addProvider(p);
         
         LOGGER.debug("PKCS11 provider yapılandırıldı: {}", providerName);
-        return provider;
+        return p;
     }
 
-    /**
-     * JDK 8'in SunEC'si yalnızca named EC eğrilerini (OID formatı) destekler.
-     * HSM'ler (örn. mali mühür) CKA_EC_PARAMS'ı genellikle explicit formda döndürür
-     * ve bu "Only named ECParameters supported" IOException'a neden olur.
-     *
-     * SunPKCS11, P11ECPrivateKey oluştururken şu çağrıyı yapar:
-     *   AlgorithmParameters.getInstance("EC")  -- provider belirtilmez
-     * Bu çağrı JCA provider arama sırasını takip eder.
-     *
-     * BouncyCastle'ı pozisyon 1'e yerleştirerek, JCA'nın EC AlgorithmParameters
-     * çözümlemesini BC'nin hem named hem explicit parametreleri destekleyen
-     * implementasyonuna yönlendiriyoruz.
-     *
-     * Ek olarak SunEC'nin kaldırılması, JCA servis cache'inin eski (kısıtlı)
-     * SunEC implementasyonunu döndürmesini engeller.
-     */
     private static synchronized void ensureBouncyCastleRegistered() {
         if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) != null) {
             return;
@@ -102,4 +86,3 @@ public class PKCS11KeyStoreProvider implements KeyStoreProvider {
                     "(EC explicit parameters desteği için)");
     }
 }
-

@@ -31,6 +31,10 @@ import io.mersel.dss.signer.api.models.SignResponse;
 import io.mersel.dss.signer.api.models.SigningMaterial;
 import io.mersel.dss.signer.api.models.enums.DocumentType;
 import io.mersel.dss.signer.api.services.crypto.CryptoSignerService;
+import java.nio.charset.StandardCharsets;
+import eu.europa.esig.dss.xades.signature.XAdESCounterSignatureParameters; 
+// Enum tanımı için gerekli (halihazırda olabilir ama kontrol et)
+import eu.europa.esig.dss.enumerations.SignaturePackaging;
 
 /**
  * XAdES imzaları oluşturan servis.
@@ -180,6 +184,70 @@ public class XAdESSignatureService {
                 }
             }
 
+
+
+            String targetSignatureId = null;
+            org.w3c.dom.NodeList sigs = mainDocument.getElementsByTagNameNS("http://www.w3.org/2000/09/xmldsig#", "Signature");
+            if (sigs.getLength() > 0) {
+                targetSignatureId = ((org.w3c.dom.Element)sigs.item(0)).getAttribute("Id");
+            }
+            DSSDocument signedDocument;
+            if (targetSignatureId != null && !targetSignatureId.isEmpty()) {
+                LOGGER.info("Counter signature işlemi başlatılıyor. Hedef imza: {}", targetSignatureId);
+
+                XAdESCounterSignatureParameters counterParams = new XAdESCounterSignatureParameters();
+                counterParams.setSignatureIdToCounterSign(targetSignatureId);
+                counterParams.setEn319132(false);
+                counterParams.setSignatureLevel(parameters.getSignatureLevel());
+                counterParams.setDigestAlgorithm(parameters.getDigestAlgorithm());
+                counterParams.setSignaturePackaging(SignaturePackaging.DETACHED); 
+
+                counterParams.setSigningCertificate(parameters.getSigningCertificate());
+                counterParams.setCertificateChain(parameters.getCertificateChain());
+
+                // 1. Karşı imzayı hesapla
+                ToBeSigned dataToSign = xadesService.getDataToSign(dssDocument, counterParams);
+                SignatureValue signatureValue = cryptoSigner.sign(dataToSign, material.getPrivateKey(), parameters.getDigestAlgorithm());
+                
+                // Counter-signature eklenmiş TÜM XML'i al
+                DSSDocument counterSignedDoc = xadesService.counterSignSignature(dssDocument, counterParams, signatureValue);
+
+                // 2. Mükerrerliği önlemek için kritik adım: 
+                // Mevcut ana dökümandaki (mainDocument) eski imzayı BUL ve SİL
+                org.w3c.dom.NodeList existingSigs = mainDocument.getElementsByTagNameNS("http://www.w3.org/2000/09/xmldsig#", "Signature");
+                for (int i = 0; i < existingSigs.getLength(); i++) {
+                    org.w3c.dom.Node sigNode = existingSigs.item(i);
+                    sigNode.getParentNode().removeChild(sigNode);
+                }
+
+                // 3. DSS'ten gelen dökümandan güncel imzayı (counter signature içeren halini) al
+                byte[] counterSignedBytes = xmlProcessor.dssDocumentToBytes(counterSignedDoc);
+                Document tempDom = xmlProcessor.parseDocument(counterSignedBytes);
+                Element updatedSignatureElement = (Element) tempDom.getElementsByTagNameNS("http://www.w3.org/2000/09/xmldsig#", "Signature").item(0);
+
+                if (updatedSignatureElement != null) {
+                    // CounterSignature elementlerini bul
+                    org.w3c.dom.NodeList counterSigs = updatedSignatureElement.getElementsByTagNameNS("http://uri.etsi.org/01903/v1.3.2#", "CounterSignature");
+                    
+                    for (int i = 0; i < counterSigs.getLength(); i++) {
+                        Element counterSigElement = (Element) counterSigs.item(i);
+                        // "Id" özniteliği şema tarafından istenmediği için siliyoruz
+                        if (counterSigElement.hasAttribute("Id")) {
+                            counterSigElement.removeAttribute("Id");
+                        }
+                    }
+                }
+
+                // 4. Güncel imzayı boşaltılmış dökümana yerleştir
+                if (updatedSignatureElement != null) {
+                    documentPlacement.placeSignatureElement(mainDocument, updatedSignatureElement, documentType);
+                }
+
+                byte[] finalBytes = xmlProcessor.documentToBytes(mainDocument);
+                String encodedSig = Base64.getEncoder().encodeToString(signatureValue.getValue());
+                
+                return new SignResponse(finalBytes, encodedSig);
+            }
             // İmza oluşturucuyu hazırla
             XAdESSignatureBuilder signatureBuilder = XAdESSignatureBuilder.getSignatureBuilder(
                     parameters, dssDocument, certificateVerifier);
@@ -193,13 +261,14 @@ public class XAdESSignatureService {
                     material.getPrivateKey(),
                     parameters.getDigestAlgorithm());
 
+
+
             // SignatureValue'yu yakala (response için)
             capturedSignatureValue = signatureValue;
 
             // İmzalı belgeyi oluştur
-            DSSDocument signedDocument = xadesService.signDocument(
-                    dssDocument, parameters, signatureValue);
-
+            signedDocument = xadesService.signDocument(
+                dssDocument, parameters, signatureValue);
             // e-Arşiv Raporu ise XAdES-A seviyesine yükselt
             signedDocument = levelUpgradeService.upgradeIfNeeded(
                     signedDocument, documentType, parameters);
